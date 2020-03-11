@@ -5,6 +5,7 @@ os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 import tensorflow as tf
 from tensorflow.keras.layers import Dense, Conv2D, Flatten
 from tensorflow.keras import Model, Sequential
+import sklearn.metrics
 
 
 import matplotlib.pyplot as plt
@@ -13,29 +14,56 @@ data = np.load('digital_data.npz')
 
 t_im = data['arr_0']
 v_im = data['arr_1']
-t_lab = data['arr_2']
-v_lab = data['arr_3']
+t_lab = np.array(data['arr_2'], dtype=np.float32)
+v_lab = np.array(data['arr_3'], dtype=np.float32)
 
 data.close()
 
+K = tf.keras.backend
 
+# jaccard index loss function
+def jaccard_distance(y_true, y_pred, smooth=100):
+    intersection = K.sum(K.abs(y_true * y_pred), axis=-1)
+    sum_ = K.sum(K.abs(y_true) + K.abs(y_pred), axis=-1)
+    jac = (intersection + smooth) / (sum_ - intersection + smooth)
+    return (1 - jac) * smooth
+
+def sk_acc(y_true, y_pred):
+    L = y_true.shape[0]
+    pt = tf.cast(y_pred > .5, dtype=y_true.dtype)
+    correct = tf.cast(K.sum(y_true*pt,axis=-1) == 2, 'int32')
+    foo = tf.cast((1-y_true)*(1-pt), 'int32')
+    correct *= tf.cast(K.sum(foo,axis=-1) == 8, 'int32')
+    return K.sum(correct)/L
+
+def sk_jacc(y_true, y_pred):
+    return sklearn.metrics.jaccard_similarity_score(y_true, y_pred > .5)
 
 
 # dopey ML model
-sgd = tf.optimizers.SGD(0.01)
+sgd = tf.optimizers.Adam(0.01)
 model = Sequential()
 model.add(Dense(10, input_shape=(28*28,),
           activation='sigmoid'))
 
-model.compile(loss='binary_crossentropy',
-            optimizer=sgd, metrics=['accuracy'])
+#model.add(Dense(10, activation='sigmoid'))
 
-hist = model.fit(t_im.reshape((-1,784)),t_lab, epochs=1,
+model.compile(loss='binary_crossentropy',
+            optimizer=sgd, metrics=['accuracy',
+				])
+
+hist = model.fit(t_im.reshape((-1,784)),t_lab, epochs=10,
         validation_data=[v_im.reshape((-1,784)),v_lab])
 
 pred = model.predict(v_im.reshape((-1,784)))
 
+# % exact matches for all labels in an image
 print(sklearn.metrics.accuracy_score(v_lab, pred > .5))
+
+# intersection / union of sets (length, really)
+print(sklearn.metrics.jaccard_similarity_score(v_lab, pred > .5))
+
+# % true labels correctly identified
 print(np.sum(v_lab * pred)/len(v_im)/2)
 
 # look at averages of mnist data
