@@ -3,7 +3,7 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 import tensorflow as tf
-from tensorflow.keras.layers import Dense, Conv2D, Flatten
+from tensorflow.keras.layers import Dense, Conv2D, Flatten, MaxPool2D, GlobalMaxPool2D
 from tensorflow.keras import Model, Sequential
 import sklearn.metrics
 
@@ -41,30 +41,53 @@ def sk_jacc(y_true, y_pred):
 
 
 # dopey ML model
-sgd = tf.optimizers.Adam(0.01)
+sgd = tf.optimizers.Adam(0.001)
 model = Sequential()
-model.add(Dense(10, input_shape=(28*28,),
-          activation='sigmoid'))
+#model.add(Dense(10, input_shape=(28*28,),
+#          activation='sigmoid'))
+model.add(Conv2D(4, kernel_size=3, 
+            activation='relu',
+            padding='same',
+            input_shape=(28,28,1)))
+model.add(MaxPool2D())
 
-#model.add(Dense(10, activation='sigmoid'))
+model.add(Conv2D(16, kernel_size=3,
+            activation='relu',
+            padding='same'))
+model.add(MaxPool2D())
+
+model.add(Conv2D(64, kernel_size=3,
+            activation='relu',
+            padding='same'))
+model.add(MaxPool2D(padding='same'))
+
+model.add(Conv2D(256, kernel_size=3,
+            activation='relu',
+            padding='same'))
+
+#model.add(Flatten())
+model.add(GlobalMaxPool2D())
+model.add(Dense(10, activation='sigmoid'))
 
 model.compile(loss='binary_crossentropy',
             optimizer=sgd, metrics=['accuracy',
 				])
+model.summary()
 
-hist = model.fit(t_im.reshape((-1,784)),t_lab, epochs=10,
-        validation_data=[v_im.reshape((-1,784)),v_lab])
+hist = model.fit(t_im.reshape((-1,28,28,1)),t_lab, epochs=20,
+        validation_data=[v_im.reshape((-1,28,28,1)),v_lab])
 
-pred = model.predict(v_im.reshape((-1,784)))
+pred = model.predict(v_im.reshape((-1,28,28,1)))
 
 # % exact matches for all labels in an image
 print(sklearn.metrics.accuracy_score(v_lab, pred > .5))
+np.sum(np.sum(v_lab *(pred > .5), axis=1) == 2) / 8192
 
 # intersection / union of sets (length, really)
 print(sklearn.metrics.jaccard_similarity_score(v_lab, pred > .5))
 
 # % true labels correctly identified
-print(np.sum(v_lab * pred)/len(v_im)/2)
+print(np.sum((v_lab * pred) > .5)/len(v_im)/2)
 
 # look at averages of mnist data
 mnist = tf.keras.datasets.mnist
